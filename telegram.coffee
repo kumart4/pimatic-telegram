@@ -355,19 +355,14 @@ module.exports = (env) ->
           action: -> return null
           protected: false
           response: (msg) =>
-            text = "Default commands:\n"
+            base = "Default commands:\n"
+            pred = "Predicate triggers:\n"
+            rule = "Any command following rule action syntax\nExamples:\n\t'turn on <device>'\n\t'set temp of <device> to 21'\n"
             for req in @requests
-              if req.type is "base"
-                text += "\t" + req.command
-                if req.command is "get device"
-                  text += " <device name | device id>"
-                text += "\n"
-            text += "\nRule commands: \n"
-            for req in @requests
-              if req.type is "rule"
-                text += "\t" + req.command + "\n"
-            text += "\nAny command following rule action syntax\nExamples:\n\t'turn on <device>'\n\t'set temp of <device> to 21'\n"
-            return text
+              base += req.help() if req.type is "base"
+              pred += req.help() if req.type is "predicate"
+            return "#{base}\n#{pred}\n#{rule}"
+          help: () -> "\t#{@command}\n"
         },
         {
           command: "execute",
@@ -391,6 +386,7 @@ module.exports = (env) ->
             for dev in devices
               text += '\tName: ' + dev.name + "\nID: " + dev.id + "\n\n"
             return text
+          help: () -> return "\t#{@command}\n"
         },
         {
           command: "get device"
@@ -407,8 +403,8 @@ module.exports = (env) ->
                   text += '\t\t' + name.charAt(0).toUpperCase() + name.slice(1) + ": " + dev.getLastAttributeValue(name) + "\n"
                 return text
             return "device not found"
-        }]
-      #@queue = []
+          help: () -> return "\t#{@command} <device name | device id>\n"
+        }] 
       
       
     start: (@client) =>
@@ -469,10 +465,9 @@ module.exports = (env) ->
         if sender.isAuthenticated()  # May the force be with you
           env.logger.info "command '" + message + "' received from " + sender.getName()
           for req in @requests
-            #if req.command.toLowerCase() is message.slice(0, req.command.length) # test message against base messages and 'receive "command"' predicate in ruleset
-            if (req.type is "rule" and req.command is message) or (req.type is "base" and req.command.toLowerCase() is message.slice(0, req.command.length)) # test message against base messages and 'receive "command"' predicate in ruleset
+            if (req.type is "predicate" and req.command is message) or (req.type is "base" and req.command.toLowerCase() is message.slice(0, req.command.length))
               req.sender = sender
-              @emit('receivedRulePredicate', req.command, req.sender, req.id) if req.type is 'rule'
+              @emit('receivedRulePredicate', req.command, req.sender, req.id) if req.type is 'predicate'
               req.action()
     
               if req.type is "base" or instance.config.confirmRuleTrigger
@@ -517,10 +512,10 @@ module.exports = (env) ->
           command: req.getCommand()
           action: () => req.emit('change', 'event')
           protected: true
-          type: "rule"
+          type: "predicate"
           sender: null
-          #response: (msg) => return "Rule condition '" + obj.request + "' triggered by " + obj.user # msg variable is unneccesary
-          response: () => return "Rule condition '" + obj.request + "' triggered by " + obj.sender.getName()
+          response: () => return "Predicate '" + @command + "' triggered by " + @sender.getName()
+          help: () -> return "\t#{@command}\n"
         }
         @requests.push obj
         env.logger.info "Listener enabled ruleset command: '", obj.command, "'"
